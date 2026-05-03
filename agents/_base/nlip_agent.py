@@ -30,6 +30,8 @@ def make_llm_config(max_tokens: int = 2048) -> OpenAIConfig:
         api_key=OPENROUTER_API_KEY,
         base_url=LLM_BASE_URL,
         max_completion_tokens=max_tokens,
+        temperature=0.0,
+        seed=42,
     )
 
 

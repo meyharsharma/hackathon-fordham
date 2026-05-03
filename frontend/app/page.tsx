@@ -22,6 +22,19 @@ function clock(d = new Date()): string {
   return d.toTimeString().slice(0, 8);
 }
 
+function summaryHtml(s: string): string {
+  const esc = s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(
+      /`([^`]+)`/g,
+      '<code class="inline-mono">$1</code>',
+    )
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return esc;
+}
+
 const initState = () =>
   Object.fromEntries(AGENT_ORDER.map((n) => [n, "idle"])) as Record<
     AgentName,
@@ -52,6 +65,7 @@ export default function Page() {
   const [decisions, setDecisions] = useState<unknown[]>([]);
   const [onboardingMd, setOnboardingMd] = useState("");
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [now, setNow] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
   const startedAt = useRef<number | null>(null);
@@ -301,25 +315,39 @@ export default function Page() {
 
         {/* Summary strip */}
         <section className="px-8 pt-6 pb-4">
-          <div className="hairline bg-[var(--color-surface-1)] p-5 grid grid-cols-[1fr_auto] gap-6 items-start">
-            <div>
-              <div className="eyebrow mb-2">analysis summary</div>
-              <p className="text-[15px] text-[var(--color-fg)] leading-snug max-w-3xl">
-                {graph?.summary ||
-                  (running
+          <div className="hairline bg-[var(--color-surface-1)] p-7 grid grid-cols-[1fr_auto] gap-8 items-start">
+            <div className="max-w-[60ch]">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-1 h-4 bg-[var(--color-accent)]" />
+                <span className="eyebrow">analysis summary</span>
+              </div>
+              {graph?.summary ? (
+                <p
+                  className="text-[16.5px] text-[var(--color-fg)] leading-[1.65] font-sans tracking-[-0.005em]"
+                  dangerouslySetInnerHTML={{
+                    __html: summaryHtml(graph.summary),
+                  }}
+                />
+              ) : (
+                <p className="text-[16.5px] leading-[1.65] text-[var(--color-fg-muted)] italic">
+                  {running
                     ? "agents are working — summary will appear after the architecture pass."
-                    : "press execute to begin a documentation run.")}
-              </p>
+                    : "press execute to begin a documentation run."}
+                </p>
+              )}
               {graph && Array.isArray(graph.layers) && graph.layers.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-4">
-                  {graph.layers.map((l, i) => (
-                    <span
-                      key={i}
-                      className="font-mono text-[10.5px] px-2 py-1 hairline-strong bg-[var(--color-surface-2)] text-[var(--color-fg-soft)]"
-                    >
-                      {l}
-                    </span>
-                  ))}
+                <div className="mt-6 pt-5 hairline-t">
+                  <div className="eyebrow mb-3">layers detected</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {graph.layers.map((l, i) => (
+                      <span
+                        key={i}
+                        className="font-mono text-[11px] px-2.5 py-1 bg-[var(--color-surface-2)] hairline text-[var(--color-fg-soft)]"
+                      >
+                        {l}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -371,10 +399,19 @@ export default function Page() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(onboardingMd);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1400);
                   }}
-                  className="font-mono text-[10.5px] text-[var(--color-fg-muted)] hover:text-[var(--color-accent)] uppercase tracking-wider hairline px-2 py-1"
+                  className={`group inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] px-3 py-1.5 hairline-strong transition-all ${
+                    copied
+                      ? "bg-[var(--color-done)] text-[var(--color-bg)] border-[var(--color-done)]"
+                      : "bg-[var(--color-surface-2)] text-[var(--color-fg-soft)] hover:bg-[var(--color-accent)] hover:text-[var(--color-bg)] hover:border-[var(--color-accent)]"
+                  }`}
                 >
-                  copy md
+                  <span className="font-mono text-[12px] leading-none">
+                    {copied ? "✓" : "⎘"}
+                  </span>
+                  {copied ? "copied" : "copy markdown"}
                 </button>
               )}
             </div>

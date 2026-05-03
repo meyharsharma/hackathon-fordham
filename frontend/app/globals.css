@@ -262,3 +262,15 @@ button { cursor: pointer; }
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "zero" 1;
 }
+
+/* Inline code chip (used outside .essay) */
+.inline-mono {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--color-surface-2);
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-accent);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
