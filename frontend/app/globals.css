@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+@theme {
+  --color-paper: #f5f1e8;
+  --color-paper-warm: #efe8d8;
+  --color-ink: #1a1714;
+  --color-ink-soft: #4a423a;
+  --color-ink-faint: #8a7e6e;
+  --color-rust: #9b4520;
+  --color-rust-soft: #b86a4a;
+  --color-rule: #c8bfa8;
+  --color-rule-faint: #d8d0bb;
+  --color-stamp: #6b4a2e;
+
+  --font-serif: "IBM Plex Serif", "Iowan Old Style", Georgia, serif;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+html, body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-feature-settings: "kern" 1, "liga" 1, "onum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle paper texture — speckled noise */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.06;
+  background-image:
+    radial-gradient(circle at 20% 30%, var(--color-stamp) 0.5px, transparent 0.5px),
+    radial-gradient(circle at 70% 60%, var(--color-stamp) 0.5px, transparent 0.5px),
+    radial-gradient(circle at 40% 80%, var(--color-stamp) 0.4px, transparent 0.4px),
+    radial-gradient(circle at 90% 10%, var(--color-stamp) 0.5px, transparent 0.5px);
+  background-size: 7px 7px, 11px 11px, 13px 13px, 17px 17px;
+  mix-blend-mode: multiply;
+}
+
+/* Faint horizontal ruling, like notebook paper */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--color-rule-faint) 31px,
+    var(--color-rule-faint) 32px
+  );
+}
+
+::selection { background: var(--color-rust); color: var(--color-paper); }
+
+/* Disable rounded corners globally — this is a paper interface */
+*, *::before, *::after { border-radius: 0 !important; }
+
+/* Drop cap utility */
+.dropcap::first-letter {
+  float: left;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 4.6em;
+  line-height: 0.85;
+  padding: 0.05em 0.12em 0 0;
+  color: var(--color-rust);
+  font-feature-settings: "lnum" 1;
+}
+
+/* Leader dots between TOC label + value */
+.leaders {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.leaders > .label { white-space: nowrap; }
+.leaders > .dots {
+  flex: 1;
+  border-bottom: 1px dotted var(--color-rule);
+  transform: translateY(-3px);
+  min-width: 2rem;
+}
+.leaders > .value { white-space: nowrap; font-family: var(--font-mono); font-size: 0.85em; }
+
+/* Stamp — for status pill */
+.stamp {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 10px;
+  border: 1.5px solid currentColor;
+  padding: 3px 8px 2px;
+  display: inline-block;
+  transform: rotate(-2deg);
+  color: var(--color-stamp);
+}
+.stamp.fresh { color: var(--color-rust); transform: rotate(-3.5deg); }
+.stamp.live { color: var(--color-rust); animation: stamp-pulse 1.6s ease-in-out infinite; }
+
+@keyframes stamp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes ink-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ink-in { animation: ink-fade 0.35s ease-out both; }
+
+@keyframes underline-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Onboarding doc prose — long-form essay */
+.essay { font-size: 17px; line-height: 1.65; max-width: 64ch; }
+.essay h1, .essay h2, .essay h3 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-feature-settings: "smcp" 0, "lnum" 1;
+  letter-spacing: -0.005em;
+}
+.essay h1 { font-size: 2.4em; margin: 0.4em 0 0.6em; line-height: 1.1; }
+.essay h2 {
+  font-size: 1.05em;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+  margin-top: 2.2em;
+  margin-bottom: 0.6em;
+  color: var(--color-ink-soft);
+  border-bottom: 1px solid var(--color-rule);
+  padding-bottom: 0.3em;
+}
+.essay h3 { font-size: 1.05em; margin-top: 1.6em; margin-bottom: 0.4em; }
+.essay p { margin: 0 0 1em; }
+.essay ul { list-style: none; padding-left: 0; margin: 0.4em 0 1.2em; }
+.essay ul li {
+  position: relative;
+  padding-left: 1.4em;
+  margin-bottom: 0.55em;
+}
+.essay ul li::before {
+  content: "§";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--color-rust);
+  font-weight: 600;
+}
+.essay code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--color-paper-warm);
+  padding: 1px 5px;
+  border: 1px solid var(--color-rule-faint);
+  color: var(--color-stamp);
+}
+.essay strong { color: var(--color-rust); font-weight: 600; }
+
+/* Custom scrollbar — restrained */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: var(--color-paper-warm); }
+::-webkit-scrollbar-thumb { background: var(--color-ink-faint); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-ink-soft); }
+
+/* Inputs */
+input, button {
+  font: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+input:focus { outline: none; }
+button { cursor: pointer; }

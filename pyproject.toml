@@ -1,0 +1,24 @@
+[project]
+name = "hax"
+version = "0.1.0"
+description = "Documentation generator for legacy codebases. AG2 agents over NLIP."
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "ag2[openai]>=0.9",
+    "nlip-sdk",
+    "nlip-server",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "httpx>=0.27",
+    "gitpython>=3.1",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "diskcache>=5.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agents*", "orchestrator*", "shared*"]
