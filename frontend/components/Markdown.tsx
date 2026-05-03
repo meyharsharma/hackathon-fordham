@@ -1,8 +1,9 @@
 "use client";
+import { useEffect, useRef } from "react";
 
 function inline(s: string): string {
   s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/`([^`]+)`/g, '<code data-md-code="$1">$1</code>');
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/(?<![*])\*([^*\n]+)\*(?![*])/g, "<em>$1</em>");
   return s;
@@ -65,7 +66,45 @@ function render(md: string): string {
   return out.join("\n");
 }
 
-export function Markdown({ source }: { source: string }) {
+export function Markdown({
+  source,
+  knownPaths,
+  onPathClick,
+}: {
+  source: string;
+  knownPaths?: string[];
+  onPathClick?: (path: string) => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!ref.current || !onPathClick || !knownPaths?.length) return;
+    const set = new Set(knownPaths);
+    const root = ref.current;
+    const codes = root.querySelectorAll<HTMLElement>("code[data-md-code]");
+    const handlers: { el: HTMLElement; fn: (e: Event) => void }[] = [];
+    codes.forEach((el) => {
+      const text = el.dataset.mdCode ?? el.textContent ?? "";
+      // Match exact path OR any known path that ends with this token
+      const exact = set.has(text);
+      const suffix = !exact
+        ? knownPaths.find((p) => p.endsWith("/" + text) || p.endsWith(text))
+        : null;
+      const target = exact ? text : suffix;
+      if (!target) return;
+      el.classList.add("clickable");
+      const fn = (e: Event) => {
+        e.preventDefault();
+        onPathClick(target);
+      };
+      el.addEventListener("click", fn);
+      handlers.push({ el, fn });
+    });
+    return () => {
+      handlers.forEach(({ el, fn }) => el.removeEventListener("click", fn));
+    };
+  }, [source, knownPaths, onPathClick]);
+
   if (!source.trim()) {
     return (
       <div className="hairline bg-[var(--color-surface-1)] p-8 flex flex-col items-center justify-center gap-3 text-center">
@@ -78,6 +117,7 @@ export function Markdown({ source }: { source: string }) {
   }
   return (
     <article
+      ref={ref}
       className="essay"
       dangerouslySetInnerHTML={{ __html: render(source) }}
     />

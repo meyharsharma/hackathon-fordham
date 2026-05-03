@@ -233,6 +233,20 @@ button { cursor: pointer; }
   border: 1px solid var(--color-border);
   color: var(--color-accent);
 }
+.essay code.clickable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.essay code.clickable:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: var(--color-accent);
+}
+.essay code.clickable::after {
+  content: " ↗";
+  opacity: 0.5;
+  font-size: 0.85em;
+}
 .essay strong {
   color: var(--color-fg);
   font-weight: 700;

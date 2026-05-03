@@ -49,6 +49,7 @@ export default function Page() {
   const [graph, setGraph] = useState<DepGraph | null>(null);
   const [modules, setModules] = useState<ModuleDoc[]>([]);
   const [apis, setApis] = useState<ApiEntry[]>([]);
+  const [decisions, setDecisions] = useState<unknown[]>([]);
   const [onboardingMd, setOnboardingMd] = useState("");
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -76,6 +77,9 @@ export default function Page() {
       fetchArtifact<{ api: ApiEntry[] }>(runId, "api.json")
         .then((d) => setApis(d.api ?? []))
         .catch(() => {});
+      fetchArtifact<{ decisions: unknown[] }>(runId, "decisions.json")
+        .then((d) => setDecisions(d.decisions ?? []))
+        .catch(() => {});
     }
     if (last.type === "pipeline_done") {
       fetchArtifact<string>(runId, "onboarding.md")
@@ -91,6 +95,7 @@ export default function Page() {
     setGraph(null);
     setModules([]);
     setApis([]);
+    setDecisions([]);
     setOnboardingMd("");
     setDone(false);
     setAgentState(initState());
@@ -307,14 +312,30 @@ export default function Page() {
               )}
             </div>
             <div className="grid grid-cols-3 gap-px bg-[var(--color-border)] hairline">
-              <Stat label="files" value={graph?.files?.length ?? 0} />
-              <Stat label="edges" value={graph?.edges?.length ?? 0} />
-              <Stat label="modules" value={modules.length} />
-              <Stat label="api" value={apis.length} />
+              <Stat
+                label="files"
+                value={graph?.files?.length ?? 0}
+                pending={running && !graph}
+              />
+              <Stat
+                label="edges"
+                value={graph?.edges?.length ?? 0}
+                pending={running && !graph}
+              />
+              <Stat
+                label="modules"
+                value={modules.length}
+                pending={running && !!graph && modules.length === 0}
+              />
+              <Stat
+                label="api"
+                value={apis.length}
+                pending={running && !!graph && apis.length === 0}
+              />
               <Stat
                 label="decisions"
-                value={0}
-                hint="git mining"
+                value={decisions.length}
+                pending={running && !!graph && decisions.length === 0}
               />
               <Stat label="events" value={events.length} accent />
             </div>
@@ -436,7 +457,11 @@ export default function Page() {
               )}
             </div>
             <div className="px-8 py-8">
-              <Markdown source={onboardingMd} />
+              <Markdown
+                source={onboardingMd}
+                knownPaths={filesSorted.map((f) => f.path)}
+                onPathClick={setOpenPath}
+              />
             </div>
           </div>
         </section>
@@ -463,21 +488,31 @@ function Stat({
   value,
   accent,
   hint,
+  pending,
 }: {
   label: string;
   value: number | string;
   accent?: boolean;
   hint?: string;
+  pending?: boolean;
 }) {
+  const tone = pending
+    ? "text-[var(--color-accent)]"
+    : accent
+      ? "text-[var(--color-accent)]"
+      : "text-[var(--color-fg)]";
   return (
     <div className="bg-[var(--color-surface-1)] px-4 py-3 min-w-[110px]">
-      <div className="eyebrow mb-1">{label}</div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        {label}
+        {pending && <span className="dot live" />}
+      </div>
       <div
-        className={`numeric text-[20px] font-bold ${
-          accent ? "text-[var(--color-accent)]" : "text-[var(--color-fg)]"
+        className={`numeric text-[20px] font-bold tabular-nums ${tone} ${
+          pending ? "animate-pulse" : ""
         }`}
       >
-        {value}
+        {pending ? "···" : value}
       </div>
       {hint && (
         <div className="text-[9.5px] text-[var(--color-fg-faint)] uppercase tracking-wider mt-0.5">
