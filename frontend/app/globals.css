@@ -15,10 +15,10 @@
   --color-border-bright: #3d3d4e;
 
   /* Text */
-  --color-fg: #ededf2;
-  --color-fg-soft: #b8b8c4;
-  --color-fg-muted: #7a7a8a;
-  --color-fg-faint: #4a4a58;
+  --color-fg: #f4f4f8;
+  --color-fg-soft: #dcdce4;
+  --color-fg-muted: #b0b0bc;
+  --color-fg-faint: #8a8a98;
 
   /* Accent — sodium amber */
   --color-accent: #ff7a3d;
