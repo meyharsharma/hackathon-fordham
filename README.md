@@ -98,8 +98,7 @@ cp .env.example .env
 # 4. boot the frontend
 cd frontend && pnpm install && pnpm dev
 
-# 5. open the operator console
-open http://localhost:3030
+# 5. open the operator console in your browser
 ```
 
 Paste any public git URL into the target field and press **execute**.
@@ -176,23 +175,6 @@ Measured end-to-end on Apple Silicon with OpenRouter Gemini 2.5-flash:
 
 The fan-out stage is parallel, so total time is roughly the longest of
 `architecture` + `max(module, api, decisions)` + `onboarding`.
-
-## Parallel development
-
-The repo is laid out for six parallel build tracks via git worktrees:
-
-```bash
-git worktree add ../hax-arch       feat/architecture-agent
-git worktree add ../hax-module     feat/module-agent
-git worktree add ../hax-api        feat/api-agent
-git worktree add ../hax-decisions  feat/decisions-agent
-git worktree add ../hax-onboarding feat/onboarding-agent
-git worktree add ../hax-frontend   feat/frontend
-```
-
-Each track edits its own folder under `agents/<name>/` (or `frontend/`)
-and may extend `agents/_base/` or `shared/`. The orchestrator on `main`
-stays the integration surface.
 
 ## Continuous integration
 
