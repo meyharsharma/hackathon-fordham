@@ -62,14 +62,32 @@ export default function Page() {
     return () => clearInterval(t);
   }, []);
 
+  // Track which artifacts were already fetched per run so React batching
+  // (which can collapse multiple WS events into one effect run) can't make
+  // us miss a stage_done.
+  const fetched = useRef<{ runId: string | null; arch: boolean; fanout: boolean; onb: boolean }>(
+    { runId: null, arch: false, fanout: false, onb: false },
+  );
+
   useEffect(() => {
     if (!runId) return;
-    const last = events[events.length - 1]?.ev;
-    if (!last) return;
-    if (last.type === "stage_done" && last.stage === "architecture") {
-      fetchArtifact<DepGraph>(runId, "dep_graph.json").then(setGraph).catch(() => {});
+    if (fetched.current.runId !== runId) {
+      fetched.current = { runId, arch: false, fanout: false, onb: false };
     }
-    if (last.type === "stage_done" && last.stage === "fanout") {
+    const seenStages = new Set<string>();
+    let pipelineDone = false;
+    for (const { ev } of events) {
+      if (ev.type === "stage_done") seenStages.add(ev.stage);
+      if (ev.type === "pipeline_done") pipelineDone = true;
+    }
+    if (seenStages.has("architecture") && !fetched.current.arch) {
+      fetched.current.arch = true;
+      fetchArtifact<DepGraph>(runId, "dep_graph.json")
+        .then(setGraph)
+        .catch(() => {});
+    }
+    if (seenStages.has("fanout") && !fetched.current.fanout) {
+      fetched.current.fanout = true;
       fetchArtifact<{ modules: ModuleDoc[] }>(runId, "modules.json")
         .then((d) => setModules(d.modules ?? []))
         .catch(() => {});
@@ -80,7 +98,8 @@ export default function Page() {
         .then((d) => setDecisions(d.decisions ?? []))
         .catch(() => {});
     }
-    if (last.type === "pipeline_done") {
+    if (pipelineDone && !fetched.current.onb) {
+      fetched.current.onb = true;
       fetchArtifact<string>(runId, "onboarding.md")
         .then(setOnboardingMd)
         .catch(() => {});
