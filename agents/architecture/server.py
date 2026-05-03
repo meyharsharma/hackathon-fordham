@@ -44,7 +44,7 @@ class ArchitectureAgent(AgentServer):
     name = "architecture"
     system_prompt = SYSTEM
     tools = (walk_tree, parse_imports_python, parse_imports_js, read_file_bounded)
-    max_tokens = 4096
+    max_tokens = 12000
 
 
 app = make_app(ArchitectureAgent)

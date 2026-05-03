@@ -52,7 +52,6 @@ export default function Page() {
   const [decisions, setDecisions] = useState<unknown[]>([]);
   const [onboardingMd, setOnboardingMd] = useState("");
   const [openPath, setOpenPath] = useState<string | null>(null);
-  const [filter, setFilter] = useState("");
   const [now, setNow] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
   const startedAt = useRef<number | null>(null);
@@ -151,12 +150,6 @@ export default function Page() {
     if (!Array.isArray(files)) return [];
     return [...files].sort((a, b) => a.path.localeCompare(b.path));
   }, [graph]);
-
-  const filtered = useMemo(() => {
-    if (!filter.trim()) return filesSorted;
-    const q = filter.toLowerCase();
-    return filesSorted.filter((f) => f.path.toLowerCase().includes(q));
-  }, [filesSorted, filter]);
 
   const elapsedTotal =
     startedAt.current && (running || done)
@@ -311,15 +304,10 @@ export default function Page() {
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-px bg-[var(--color-border)] hairline">
+            <div className="grid grid-cols-5 gap-px bg-[var(--color-border)] hairline">
               <Stat
                 label="files"
                 value={graph?.files?.length ?? 0}
-                pending={running && !graph}
-              />
-              <Stat
-                label="edges"
-                value={graph?.edges?.length ?? 0}
                 pending={running && !graph}
               />
               <Stat
@@ -349,91 +337,6 @@ export default function Page() {
           </div>
         </section>
 
-        {/* File browser */}
-        <section className="px-8 pb-6">
-          <div className="hairline bg-[var(--color-surface-1)]">
-            <div className="hairline-b px-5 py-3 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="eyebrow">files</span>
-                <span className="numeric text-[11px] text-[var(--color-fg-muted)]">
-                  {filtered.length} of {filesSorted.length}
-                </span>
-              </div>
-              <input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="filter…"
-                className="font-mono text-[12px] hairline px-2.5 py-1 w-56 bg-[var(--color-bg)] focus:border-[var(--color-accent)]"
-              />
-            </div>
-            {filesSorted.length === 0 ? (
-              <div className="px-5 py-12 text-center text-[var(--color-fg-faint)] text-[12px] font-mono">
-                no files indexed yet
-              </div>
-            ) : (
-              <div className="max-h-[420px] overflow-y-auto">
-                <table className="w-full font-mono text-[12px]">
-                  <thead>
-                    <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--color-fg-faint)]">
-                      <th className="px-5 py-2 font-medium w-12">#</th>
-                      <th className="px-5 py-2 font-medium">path</th>
-                      <th className="px-5 py-2 font-medium w-24">lang</th>
-                      <th className="px-5 py-2 font-medium w-20 text-right">loc</th>
-                      <th className="px-5 py-2 font-medium w-16 text-center">doc</th>
-                      <th className="px-5 py-2 font-medium w-16 text-center">api</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((f, i) => {
-                      const hasMod = moduleByPath.has(f.path);
-                      const apiCount = apiByPath.get(f.path)?.length ?? 0;
-                      return (
-                        <tr
-                          key={f.path}
-                          onClick={() => setOpenPath(f.path)}
-                          className="hairline-t cursor-pointer hover:bg-[var(--color-surface-2)] transition-colors"
-                        >
-                          <td className="px-5 py-2 text-[var(--color-fg-faint)] numeric">
-                            {String(i + 1).padStart(3, "0")}
-                          </td>
-                          <td className="px-5 py-2 text-[var(--color-fg)]">
-                            {f.path}
-                          </td>
-                          <td className="px-5 py-2 text-[var(--color-fg-muted)]">
-                            {f.language}
-                          </td>
-                          <td className="px-5 py-2 numeric text-right text-[var(--color-fg-soft)]">
-                            {f.loc}
-                          </td>
-                          <td className="px-5 py-2 text-center">
-                            {hasMod ? (
-                              <span className="dot done" />
-                            ) : (
-                              <span className="text-[var(--color-fg-faint)]">
-                                ·
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-2 text-center">
-                            {apiCount > 0 ? (
-                              <span className="numeric text-[var(--color-accent)]">
-                                {apiCount}
-                              </span>
-                            ) : (
-                              <span className="text-[var(--color-fg-faint)]">
-                                ·
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
 
         {/* Onboarding */}
         <section className="px-8 pb-12">

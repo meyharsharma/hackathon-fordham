@@ -60,7 +60,82 @@ def _coerce_obj(result, list_key: str = "items") -> dict:
             return {list_key: parsed}
         return parsed
     except json.JSONDecodeError:
+        # LLM may have truncated mid-JSON. Try progressive recovery.
+        repaired = _repair_truncated_json(text)
+        if repaired is not None:
+            return repaired
         return {"raw": text}
+
+
+def _repair_truncated_json(text: str) -> dict | None:
+    """Best-effort recovery of LLM-truncated JSON objects.
+
+    Walks back from the end of the string trying to close open brackets, then
+    parses. Useful when the model hit max_tokens mid-array.
+    """
+    if not text or text[0] != "{":
+        return None
+    # Walk forward, tracking bracket depth + string state, recording the last
+    # position where we could safely truncate.
+    depth = 0
+    in_str = False
+    esc = False
+    last_safe = -1
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            depth += 1
+        elif ch in "}]":
+            depth -= 1
+            if depth == 0:
+                last_safe = i
+        elif ch == "," and depth > 0:
+            last_safe = i  # safe to truncate before this comma
+    if last_safe < 0:
+        return None
+    candidate = text[: last_safe + 1].rstrip().rstrip(",")
+    # Close remaining open brackets greedily by inspecting unmatched stack
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    for ch in candidate:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+    while stack:
+        candidate += stack.pop()
+    try:
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list):
+            return {"items": parsed}
+    except json.JSONDecodeError:
+        return None
+    return None
 
 
 def _write_artifact(run_id: str, name: str, data: dict) -> Path:
