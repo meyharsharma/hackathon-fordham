@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend · install + smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: import smoke
+        env:
+          OPENROUTER_API_KEY: dummy-for-import-only
+        run: |
+          python - <<'PY'
+          import importlib
+          mods = [
+              "shared.config",
+              "shared.envelopes",
+              "shared.schemas",
+              "agents._base.nlip_agent",
+              "agents._base.tools",
+              "agents.architecture.server",
+              "agents.module.server",
+              "agents.api.server",
+              "agents.decisions.server",
+              "agents.onboarding.server",
+              "orchestrator.workspace",
+              "orchestrator.pipeline",
+              "orchestrator.main",
+          ]
+          for m in mods:
+              importlib.import_module(m)
+              print("ok:", m)
+          PY
+
+      - name: orchestrator boot smoke
+        env:
+          OPENROUTER_API_KEY: dummy-for-import-only
+        run: |
+          python -m uvicorn orchestrator.main:app --host 127.0.0.1 --port 8088 &
+          PID=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 1
+            if curl -fsS http://127.0.0.1:8088/health; then
+              echo "orchestrator up"
+              kill $PID 2>/dev/null || true
+              exit 0
+            fi
+          done
+          echo "orchestrator never came up"
+          kill $PID 2>/dev/null || true
+          exit 1
+
+  frontend:
+    name: frontend · install + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: build
+        run: pnpm build

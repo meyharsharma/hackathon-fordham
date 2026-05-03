@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -33,17 +34,26 @@ async def _call_agent(name: str, payload: dict, cb: EventCb | None) -> dict | st
         raise
 
 
+_FENCE_RE = re.compile(r"^```[a-zA-Z]*\s*\n?|\n?```\s*$", re.MULTILINE)
+
+
 def _coerce_obj(result, list_key: str = "items") -> dict:
-    """Agents are instructed to return JSON; if a stray fence sneaks in, strip it."""
+    """Agents return JSON; tolerate stray markdown fences with any lang tag."""
     if isinstance(result, dict):
         return result
     if isinstance(result, list):
         return {list_key: result}
     text = str(result).strip()
-    if text.startswith("```"):
-        text = text.split("```", 2)[1]
-        if text.lstrip().lower().startswith("json"):
-            text = text.split("\n", 1)[1] if "\n" in text else ""
+    text = _FENCE_RE.sub("", text).strip()
+    # Sometimes a bare lang word leaks before the JSON
+    if text and not text.lstrip().startswith(("{", "[")):
+        # Drop the first word/line if it isn't valid JSON start
+        first_brace = min(
+            (i for i in (text.find("{"), text.find("[")) if i != -1),
+            default=-1,
+        )
+        if first_brace > 0:
+            text = text[first_brace:]
     try:
         parsed = json.loads(text)
         if isinstance(parsed, list):

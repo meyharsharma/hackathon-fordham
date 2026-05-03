@@ -13,7 +13,6 @@ import {
 } from "@/lib/api";
 import { PortChips, type AgentStatus } from "@/components/PortChips";
 import { Timeline } from "@/components/Timeline";
-import { DepGraphCanvas } from "@/components/DepGraph";
 import { Markdown } from "@/components/Markdown";
 import { ModuleDrawer } from "@/components/ModuleDrawer";
 
@@ -23,32 +22,46 @@ function clock(d = new Date()): string {
   return d.toTimeString().slice(0, 8);
 }
 
+const initState = () =>
+  Object.fromEntries(AGENT_ORDER.map((n) => [n, "idle"])) as Record<
+    AgentName,
+    AgentStatus
+  >;
+
+const initElapsed = () =>
+  Object.fromEntries(AGENT_ORDER.map((n) => [n, 0])) as Record<
+    AgentName,
+    number
+  >;
+
 export default function Page() {
   const [source, setSource] = useState(DEFAULT_REPO);
   const [runId, setRunId] = useState<string | null>(null);
   const [events, setEvents] = useState<{ ev: RunEvent; ts: string }[]>([]);
   const [done, setDone] = useState(false);
+  const [running, setRunning] = useState(false);
   const [agentState, setAgentState] = useState<Record<AgentName, AgentStatus>>(
-    Object.fromEntries(AGENT_ORDER.map((n) => [n, "idle"])) as Record<
-      AgentName,
-      AgentStatus
-    >,
+    initState(),
+  );
+  const [elapsed, setElapsed] = useState<Record<AgentName, number>>(
+    initElapsed(),
   );
   const [graph, setGraph] = useState<DepGraph | null>(null);
   const [modules, setModules] = useState<ModuleDoc[]>([]);
   const [apis, setApis] = useState<ApiEntry[]>([]);
   const [onboardingMd, setOnboardingMd] = useState("");
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [now, setNow] = useState<string>("");
   const wsRef = useRef<WebSocket | null>(null);
-  const [now, setNow] = useState<string>(clock());
-  const [running, setRunning] = useState(false);
+  const startedAt = useRef<number | null>(null);
 
   useEffect(() => {
+    setNow(clock());
     const t = setInterval(() => setNow(clock()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Fetch artifacts as stages complete
   useEffect(() => {
     if (!runId) return;
     const last = events[events.length - 1]?.ev;
@@ -80,12 +93,9 @@ export default function Page() {
     setApis([]);
     setOnboardingMd("");
     setDone(false);
-    setAgentState(
-      Object.fromEntries(AGENT_ORDER.map((n) => [n, "idle"])) as Record<
-        AgentName,
-        AgentStatus
-      >,
-    );
+    setAgentState(initState());
+    setElapsed(initElapsed());
+    startedAt.current = Date.now();
     try {
       const id = await startRun(source);
       setRunId(id);
@@ -96,8 +106,10 @@ export default function Page() {
           setEvents((es) => [...es, { ev, ts: clock() }]);
           if (ev.type === "agent_start")
             setAgentState((s) => ({ ...s, [ev.agent]: "live" }));
-          if (ev.type === "agent_done")
+          if (ev.type === "agent_done") {
             setAgentState((s) => ({ ...s, [ev.agent]: "done" }));
+            setElapsed((e) => ({ ...e, [ev.agent]: ev.elapsed_s }));
+          }
           if (ev.type === "agent_error")
             setAgentState((s) => ({ ...s, [ev.agent]: "error" }));
           if (ev.type === "pipeline_done" || ev.type === "fatal") {
@@ -130,230 +142,348 @@ export default function Page() {
   }, [apis]);
 
   const filesSorted = useMemo(() => {
-    if (!graph) return [];
-    return [...graph.files].sort((a, b) => a.path.localeCompare(b.path));
+    const files = graph?.files;
+    if (!Array.isArray(files)) return [];
+    return [...files].sort((a, b) => a.path.localeCompare(b.path));
   }, [graph]);
 
-  const status = !runId
-    ? "AT REST"
-    : done
-      ? "FILED"
-      : running
-        ? "IN SESSION"
-        : "PAUSED";
+  const filtered = useMemo(() => {
+    if (!filter.trim()) return filesSorted;
+    const q = filter.toLowerCase();
+    return filesSorted.filter((f) => f.path.toLowerCase().includes(q));
+  }, [filesSorted, filter]);
+
+  const elapsedTotal =
+    startedAt.current && (running || done)
+      ? ((Date.now() - startedAt.current) / 1000).toFixed(1)
+      : "—";
+
+  const phase = !runId
+    ? "ready"
+    : running
+      ? "running"
+      : done
+        ? "complete"
+        : "idle";
+
+  const phaseColor =
+    phase === "running"
+      ? "text-[var(--color-accent)]"
+      : phase === "complete"
+        ? "text-[var(--color-done)]"
+        : "text-[var(--color-fg-muted)]";
 
   return (
-    <main className="min-h-screen px-10 py-12 max-w-[1400px] mx-auto relative">
-      {/* MASTHEAD */}
-      <header className="mb-10 grid grid-cols-[1fr_auto] gap-8 items-end pb-5 border-b-[2px] border-[var(--color-ink)]">
-        <div>
-          <p className="font-sans text-[10px] uppercase tracking-[0.32em] text-[var(--color-ink-faint)] mb-1">
-            Vol. I  ·  No. 001  ·  documentation generator for legacy codebases
-          </p>
-          <h1 className="font-serif italic text-[78px] leading-[0.95] tracking-tight text-[var(--color-ink)]">
-            hax<span className="text-[var(--color-rust)]">.</span>
-            <span className="not-italic font-light text-[28px] align-top ml-3 text-[var(--color-ink-soft)]">
-              field notes
+    <div className="grid grid-cols-[260px_1fr] min-h-screen">
+      {/* ======================= SIDEBAR ======================= */}
+      <aside className="hairline-r bg-[var(--color-surface-1)] flex flex-col sticky top-0 h-screen">
+        {/* Brand */}
+        <div className="px-5 py-5 hairline-b flex items-center gap-2.5">
+          <div className="relative w-7 h-7 hairline bg-[var(--color-surface-2)] flex items-center justify-center">
+            <span className="font-mono text-[12px] font-bold text-[var(--color-accent)]">
+              ▲
             </span>
-          </h1>
-          <p className="font-serif italic text-[15px] mt-3 text-[var(--color-ink-soft)] max-w-[58ch]">
-            Five specialist agents — written with{" "}
-            <span className="not-italic font-mono text-[12px]">AG2</span>,
-            speaking the IBM{" "}
-            <span className="not-italic font-mono text-[12px]">NLIP</span>{" "}
-            protocol — read a strange repository and return with notes.
-          </p>
-        </div>
-        <div className="text-right font-mono text-[11px] text-[var(--color-ink-soft)] space-y-1">
-          <div className="leaders w-44">
-            <span className="label">date</span>
-            <span className="dots" />
-            <span className="value">
-              {new Date().toISOString().slice(0, 10)}
-            </span>
-          </div>
-          <div className="leaders w-44">
-            <span className="label">clock</span>
-            <span className="dots" />
-            <span className="value">{now}</span>
-          </div>
-          <div className="leaders w-44">
-            <span className="label">run</span>
-            <span className="dots" />
-            <span className="value">{runId ?? "—"}</span>
-          </div>
-          <div className="pt-1">
-            <span className={`stamp ${running ? "live" : runId ? "fresh" : ""}`}>
-              {status}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* INPUT BAR */}
-      <section className="mb-10 grid grid-cols-[auto_1fr_auto] items-baseline gap-5 border-b border-[var(--color-rule)] pb-5">
-        <label className="font-sans text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)]">
-          subject of inquiry
-        </label>
-        <input
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-          placeholder="https://github.com/owner/repo"
-          className="font-mono text-[14px] text-[var(--color-stamp)] border-b border-[var(--color-ink)] py-1 px-1 bg-transparent placeholder:text-[var(--color-ink-faint)]"
-        />
-        <button
-          onClick={onRun}
-          disabled={running}
-          className="group font-sans text-[11px] uppercase tracking-[0.28em] text-[var(--color-paper)] bg-[var(--color-ink)] px-6 py-2.5 border border-[var(--color-ink)] hover:bg-[var(--color-rust)] hover:border-[var(--color-rust)] disabled:opacity-40 transition-colors"
-        >
-          {running ? "in progress" : "begin study"}
-          <span className="inline-block ml-3 group-hover:translate-x-0.5 transition-transform">
-            →
-          </span>
-        </button>
-      </section>
-
-      {/* MAIN GRID */}
-      <div className="grid grid-cols-[200px_1fr_240px] gap-10">
-        {/* LEFT: marginalia — port chips + counts */}
-        <aside className="space-y-8 sticky top-8 self-start">
-          <div>
-            <p className="font-sans text-[9px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)] mb-3">
-              correspondents
-            </p>
-            <PortChips states={agentState} />
+            <span className="absolute -top-px -right-px w-1.5 h-1.5 bg-[var(--color-accent)]" />
           </div>
           <div>
-            <p className="font-sans text-[9px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)] mb-3">
-              tally
-            </p>
-            <ul className="font-mono text-[11px] space-y-1.5">
-              <li className="leaders">
-                <span className="label">files</span>
-                <span className="dots" />
-                <span className="value">{graph?.files.length ?? 0}</span>
-              </li>
-              <li className="leaders">
-                <span className="label">edges</span>
-                <span className="dots" />
-                <span className="value">{graph?.edges.length ?? 0}</span>
-              </li>
-              <li className="leaders">
-                <span className="label">modules</span>
-                <span className="dots" />
-                <span className="value">{modules.length}</span>
-              </li>
-              <li className="leaders">
-                <span className="label">apis</span>
-                <span className="dots" />
-                <span className="value">{apis.length}</span>
-              </li>
-              <li className="leaders">
-                <span className="label">envelopes</span>
-                <span className="dots" />
-                <span className="value">{events.length}</span>
-              </li>
-            </ul>
-          </div>
-          {graph && graph.layers.length > 0 && (
-            <div>
-              <p className="font-sans text-[9px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)] mb-3">
-                strata
-              </p>
-              <ul className="font-serif italic text-[13px] space-y-1 leading-snug">
-                {graph.layers.map((l) => (
-                  <li key={l}>{l}</li>
-                ))}
-              </ul>
+            <div className="font-mono text-[14px] font-bold tracking-tight">
+              codescan
             </div>
-          )}
-        </aside>
-
-        {/* CENTER: graph + onboarding essay */}
-        <section className="space-y-12 min-w-0">
-          <div>
-            <h2 className="font-sans text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)] mb-1">
-              plate I — dependency etching
-            </h2>
-            <p className="font-serif italic text-[13px] text-[var(--color-ink-soft)] mb-3">
-              {graph?.summary ||
-                "the architecture agent reports here once its survey is complete."}
-            </p>
-            <DepGraphCanvas graph={graph} />
+            <div className="text-[10px] text-[var(--color-fg-muted)] tracking-widest uppercase font-mono mt-0.5">
+              v0.1 · scanner
+            </div>
           </div>
+        </div>
 
-          <div>
-            <h2 className="font-sans text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)] mb-3">
-              the field guide
-            </h2>
-            <Markdown source={onboardingMd} />
+        {/* Agents rail label */}
+        <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+          <span className="eyebrow">agents</span>
+          <span className="numeric text-[10px] text-[var(--color-fg-faint)]">
+            5 nodes
+          </span>
+        </div>
+
+        <PortChips states={agentState} elapsed={elapsed} />
+
+        {/* Run meta */}
+        <div className="mt-auto p-5 hairline-t space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">run</span>
+            <span className="font-mono text-[11px] text-[var(--color-fg-soft)]">
+              {runId ?? "—"}
+            </span>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">phase</span>
+            <span className={`font-mono text-[11px] ${phaseColor}`}>
+              {phase}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">elapsed</span>
+            <span className="numeric text-[11px] text-[var(--color-fg-soft)]">
+              {elapsedTotal}{elapsedTotal !== "—" ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">clock</span>
+            <span className="numeric text-[11px] text-[var(--color-fg-soft)]">
+              {now}
+            </span>
+          </div>
+          <div className="pt-3 hairline-t">
+            <div className="text-[10px] font-mono text-[var(--color-fg-faint)] leading-relaxed">
+              <div>
+                NLIP · ECMA-431 · localhost
+              </div>
+              <div className="mt-1">
+                AG2 beta · gemini-2.5-flash
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
 
-          <div>
-            <h2 className="font-sans text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-faint)] mb-3">
-              record of dispatches
-            </h2>
-            <Timeline events={events} />
+      {/* ======================= MAIN ======================= */}
+      <main className="flex flex-col min-w-0">
+        {/* Top bar — input */}
+        <header className="hairline-b bg-[var(--color-surface-1)] px-8 py-4 flex items-center gap-4 sticky top-0 z-30">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="eyebrow">target</span>
+          </div>
+          <div className="flex-1 flex items-center hairline bg-[var(--color-bg)] px-3 py-2 focus-within:border-[var(--color-accent)] transition-colors">
+            <span className="font-mono text-[12px] text-[var(--color-fg-faint)] mr-2 shrink-0">
+              git ::
+            </span>
+            <input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="https://github.com/owner/repo"
+              className="flex-1 font-mono text-[13px] text-[var(--color-fg)] placeholder:text-[var(--color-fg-faint)] min-w-0"
+            />
+          </div>
+          <button
+            onClick={onRun}
+            disabled={running}
+            className="group shrink-0 font-mono text-[11px] uppercase tracking-[0.2em] font-semibold text-[var(--color-bg)] bg-[var(--color-accent)] px-5 py-2.5 hover:bg-[var(--color-accent-soft)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {running ? (
+              <>
+                <span className="dot live" /> running
+              </>
+            ) : (
+              <>
+                execute
+                <span className="group-hover:translate-x-0.5 transition-transform">
+                  →
+                </span>
+              </>
+            )}
+          </button>
+        </header>
+
+        {/* Summary strip */}
+        <section className="px-8 pt-6 pb-4">
+          <div className="hairline bg-[var(--color-surface-1)] p-5 grid grid-cols-[1fr_auto] gap-6 items-start">
+            <div>
+              <div className="eyebrow mb-2">analysis summary</div>
+              <p className="text-[15px] text-[var(--color-fg)] leading-snug max-w-3xl">
+                {graph?.summary ||
+                  (running
+                    ? "agents are working — summary will appear after the architecture pass."
+                    : "press execute to begin a documentation run.")}
+              </p>
+              {graph && Array.isArray(graph.layers) && graph.layers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-4">
+                  {graph.layers.map((l, i) => (
+                    <span
+                      key={i}
+                      className="font-mono text-[10.5px] px-2 py-1 hairline-strong bg-[var(--color-surface-2)] text-[var(--color-fg-soft)]"
+                    >
+                      {l}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-px bg-[var(--color-border)] hairline">
+              <Stat label="files" value={graph?.files?.length ?? 0} />
+              <Stat label="edges" value={graph?.edges?.length ?? 0} />
+              <Stat label="modules" value={modules.length} />
+              <Stat label="api" value={apis.length} />
+              <Stat
+                label="decisions"
+                value={0}
+                hint="git mining"
+              />
+              <Stat label="events" value={events.length} accent />
+            </div>
           </div>
         </section>
 
-        {/* RIGHT: contents — file list */}
-        <aside className="sticky top-8 self-start">
-          <p className="font-sans text-[9px] uppercase tracking-[0.28em] text-[var(--color-ink-faint)] mb-3">
-            table of contents
-          </p>
-          {filesSorted.length === 0 ? (
-            <p className="font-mono text-[11px] italic text-[var(--color-ink-faint)]">
-              no entries indexed
-            </p>
-          ) : (
-            <ol className="space-y-1 max-h-[78vh] overflow-y-auto pr-2">
-              {filesSorted.map((f, i) => {
-                const has = moduleByPath.has(f.path);
-                return (
-                  <li key={f.path}>
-                    <button
-                      onClick={() => setOpenPath(f.path)}
-                      className="w-full text-left leaders group"
-                    >
-                      <span
-                        className={`label font-mono text-[11px] truncate max-w-[140px] ${
-                          has
-                            ? "text-[var(--color-stamp)] group-hover:text-[var(--color-rust)]"
-                            : "text-[var(--color-ink-faint)]"
-                        }`}
-                        title={f.path}
-                      >
-                        {String(i + 1).padStart(2, "0")}.{" "}
-                        {f.path.length > 22 ? "…" + f.path.slice(-21) : f.path}
-                      </span>
-                      <span className="dots" />
-                      <span className="value text-[var(--color-ink-faint)]">
-                        {f.loc}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </aside>
-      </div>
+        {/* Timeline */}
+        <section className="px-8 pb-6 min-h-[420px]">
+          <div className="h-[420px]">
+            <Timeline events={events} running={running} />
+          </div>
+        </section>
+
+        {/* File browser */}
+        <section className="px-8 pb-6">
+          <div className="hairline bg-[var(--color-surface-1)]">
+            <div className="hairline-b px-5 py-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="eyebrow">files</span>
+                <span className="numeric text-[11px] text-[var(--color-fg-muted)]">
+                  {filtered.length} of {filesSorted.length}
+                </span>
+              </div>
+              <input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="filter…"
+                className="font-mono text-[12px] hairline px-2.5 py-1 w-56 bg-[var(--color-bg)] focus:border-[var(--color-accent)]"
+              />
+            </div>
+            {filesSorted.length === 0 ? (
+              <div className="px-5 py-12 text-center text-[var(--color-fg-faint)] text-[12px] font-mono">
+                no files indexed yet
+              </div>
+            ) : (
+              <div className="max-h-[420px] overflow-y-auto">
+                <table className="w-full font-mono text-[12px]">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-[var(--color-fg-faint)]">
+                      <th className="px-5 py-2 font-medium w-12">#</th>
+                      <th className="px-5 py-2 font-medium">path</th>
+                      <th className="px-5 py-2 font-medium w-24">lang</th>
+                      <th className="px-5 py-2 font-medium w-20 text-right">loc</th>
+                      <th className="px-5 py-2 font-medium w-16 text-center">doc</th>
+                      <th className="px-5 py-2 font-medium w-16 text-center">api</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((f, i) => {
+                      const hasMod = moduleByPath.has(f.path);
+                      const apiCount = apiByPath.get(f.path)?.length ?? 0;
+                      return (
+                        <tr
+                          key={f.path}
+                          onClick={() => setOpenPath(f.path)}
+                          className="hairline-t cursor-pointer hover:bg-[var(--color-surface-2)] transition-colors"
+                        >
+                          <td className="px-5 py-2 text-[var(--color-fg-faint)] numeric">
+                            {String(i + 1).padStart(3, "0")}
+                          </td>
+                          <td className="px-5 py-2 text-[var(--color-fg)]">
+                            {f.path}
+                          </td>
+                          <td className="px-5 py-2 text-[var(--color-fg-muted)]">
+                            {f.language}
+                          </td>
+                          <td className="px-5 py-2 numeric text-right text-[var(--color-fg-soft)]">
+                            {f.loc}
+                          </td>
+                          <td className="px-5 py-2 text-center">
+                            {hasMod ? (
+                              <span className="dot done" />
+                            ) : (
+                              <span className="text-[var(--color-fg-faint)]">
+                                ·
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-2 text-center">
+                            {apiCount > 0 ? (
+                              <span className="numeric text-[var(--color-accent)]">
+                                {apiCount}
+                              </span>
+                            ) : (
+                              <span className="text-[var(--color-fg-faint)]">
+                                ·
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Onboarding */}
+        <section className="px-8 pb-12">
+          <div className="hairline bg-[var(--color-surface-1)]">
+            <div className="hairline-b px-5 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="eyebrow">onboarding · field guide</span>
+                <span className="font-mono text-[10.5px] text-[var(--color-fg-faint)]">
+                  produced by :9005
+                </span>
+              </div>
+              {onboardingMd && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(onboardingMd);
+                  }}
+                  className="font-mono text-[10.5px] text-[var(--color-fg-muted)] hover:text-[var(--color-accent)] uppercase tracking-wider hairline px-2 py-1"
+                >
+                  copy md
+                </button>
+              )}
+            </div>
+            <div className="px-8 py-8">
+              <Markdown source={onboardingMd} />
+            </div>
+          </div>
+        </section>
+
+        <footer className="px-8 pb-6 flex items-center justify-between text-[10px] font-mono text-[var(--color-fg-faint)]">
+          <span>codescan · v0.1</span>
+          <span>NLIP/ECMA-430 · agents over loopback</span>
+          <span>built with AG2 · gemini-2.5-flash</span>
+        </footer>
+      </main>
 
       <ModuleDrawer
         path={openPath}
-        module={openPath ? moduleByPath.get(openPath) ?? null : null}
-        apis={openPath ? apiByPath.get(openPath) ?? [] : []}
+        module={openPath ? (moduleByPath.get(openPath) ?? null) : null}
+        apis={openPath ? (apiByPath.get(openPath) ?? []) : []}
         onClose={() => setOpenPath(null)}
       />
+    </div>
+  );
+}
 
-      <footer className="mt-20 pt-6 border-t border-[var(--color-rule)] flex justify-between text-[10px] font-mono text-[var(--color-ink-faint)]">
-        <span>hax · field notebook edition</span>
-        <span>NLIP / ECMA-430 · agents over loopback</span>
-        <span>
-          set in IBM Plex Serif & JetBrains Mono · printed on parchment
-        </span>
-      </footer>
-    </main>
+function Stat({
+  label,
+  value,
+  accent,
+  hint,
+}: {
+  label: string;
+  value: number | string;
+  accent?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="bg-[var(--color-surface-1)] px-4 py-3 min-w-[110px]">
+      <div className="eyebrow mb-1">{label}</div>
+      <div
+        className={`numeric text-[20px] font-bold ${
+          accent ? "text-[var(--color-accent)]" : "text-[var(--color-fg)]"
+        }`}
+      >
+        {value}
+      </div>
+      {hint && (
+        <div className="text-[9.5px] text-[var(--color-fg-faint)] uppercase tracking-wider mt-0.5">
+          {hint}
+        </div>
+      )}
+    </div>
   );
 }

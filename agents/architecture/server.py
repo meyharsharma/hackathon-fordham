@@ -23,7 +23,8 @@ Process:
    to understand each file's role.
 3. Identify architectural layers (e.g. "transport", "domain", "persistence",
    "ui", "infra"). Group files into these layers.
-4. Emit a single JSON object — NO markdown, NO prose around it — matching:
+4. Emit a single JSON object — NO markdown fences (do NOT wrap in ```json or
+   ```python), NO prose around it — just raw JSON matching:
 
 {
   "root": "<workspace path>",

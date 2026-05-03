@@ -1,16 +1,9 @@
 "use client";
-/* Tiny zero-dep markdown renderer — handles headings, paragraphs,
- * unordered lists, inline `code`, and **bold**. Sufficient for the
- * onboarding doc the agent emits. */
 
 function inline(s: string): string {
-  // escape HTML
   s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // inline code
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // bold
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  // italic
   s = s.replace(/(?<![*])\*([^*\n]+)\*(?![*])/g, "<em>$1</em>");
   return s;
 }
@@ -20,7 +13,6 @@ function render(md: string): string {
   const out: string[] = [];
   let i = 0;
   let inList = false;
-  let firstP = true;
 
   const closeList = () => {
     if (inList) {
@@ -44,7 +36,6 @@ function render(md: string): string {
       closeList();
       const lvl = m[1].length;
       out.push(`<h${lvl}>${inline(m[2])}</h${lvl}>`);
-      firstP = lvl === 1; // next paragraph after H1 gets the dropcap
       i++;
       continue;
     }
@@ -59,7 +50,6 @@ function render(md: string): string {
       continue;
     }
 
-    // paragraph — collect consecutive non-empty, non-special lines
     const buf: string[] = [trimmed];
     i++;
     while (i < lines.length) {
@@ -69,9 +59,7 @@ function render(md: string): string {
       i++;
     }
     closeList();
-    const body = inline(buf.join(" "));
-    out.push(`<p${firstP ? ' class="dropcap"' : ""}>${body}</p>`);
-    firstP = false;
+    out.push(`<p>${inline(buf.join(" "))}</p>`);
   }
   closeList();
   return out.join("\n");
@@ -80,9 +68,12 @@ function render(md: string): string {
 export function Markdown({ source }: { source: string }) {
   if (!source.trim()) {
     return (
-      <p className="font-mono text-xs text-[var(--color-ink-faint)] italic">
-        — onboarding doc appears here once the pipeline closes —
-      </p>
+      <div className="hairline bg-[var(--color-surface-1)] p-8 flex flex-col items-center justify-center gap-3 text-center">
+        <span className="eyebrow">pending synthesis</span>
+        <p className="text-[12px] text-[var(--color-fg-faint)] font-mono max-w-md">
+          onboarding document appears once all upstream agents have reported
+        </p>
+      </div>
     );
   }
   return (
