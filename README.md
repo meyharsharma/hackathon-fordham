@@ -1,6 +1,6 @@
 <div align="center">
 
-# hax
+# codescan
 
 **Documentation generator for legacy codebases.**
 Five specialist AI agents — written with [AG2](https://github.com/ag2ai/ag2) and
@@ -19,7 +19,7 @@ strange repository and return a complete onboarding guide.
 
 ## Overview
 
-Point `hax` at any git repository and it produces:
+Point `codescan` at any git repository and it produces:
 
 - A **dependency graph** of the source tree
 - A **per-module summary** (purpose, responsibilities, neighbors)
